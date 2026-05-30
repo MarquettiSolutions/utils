@@ -1,0 +1,105 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:17
+    container_name: postgres
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_MULTIPLE_DATABASES: accounting
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - my_network
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "10"
+    volumes:
+      - ./multiple-databases.sh:/docker-entrypoint-initdb.d/multiple-databases.sh
+      - data:/var/lib/postgresql/data
+
+
+  redpanda:
+    image: docker.redpanda.com/vectorized/redpanda:latest
+    container_name: redpanda
+    command:
+    - redpanda
+    - start
+    - --smp
+    - '1'
+    - --reserve-memory
+    - 0M
+    - --overprovisioned
+    - --node-id
+    - '0'
+    - --kafka-addr
+    - PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+    - --advertise-kafka-addr
+    - PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+    - --pandaproxy-addr
+    - PLAINTEXT://0.0.0.0:28082,OUTSIDE://0.0.0.0:8082
+    - --advertise-pandaproxy-addr
+    - PLAINTEXT://redpanda:28082,OUTSIDE://localhost:8082
+    ports:
+      - 8081:8081
+      - 8082:8082
+      - 9092:9092
+      - 9644:9644
+      - 28082:28082
+      - 29092:29092
+    networks:
+      - my_network
+
+  console:
+    container_name: console
+    image: docker.redpanda.com/vectorized/console:latest
+    entrypoint: /bin/sh
+    command: -c "echo \"$$CONSOLE_CONFIG_FILE\" > /tmp/config.yml; /app/console"
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:29092"]
+          schemaRegistry:
+            enabled: true
+            urls: ["http://redpanda:8081"]
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://redpanda:9644"]
+        connect:
+          enabled: true
+          clusters:
+            - name: local-connect-cluster
+              url: http://connect:8083
+    ports:
+      - 8080:8080
+    networks:
+      - my_network
+    depends_on:
+      - redpanda
+
+  minio:
+    image: minio/minio
+    ports:
+      - "4566:4566"
+      - "4567:4567"
+    volumes:
+      - ./tmp/buckets:/data
+    environment:
+      MINIO_ROOT_USER: my_user
+      MINIO_ROOT_PASSWORD: my_password
+    command: server /data --address :4566 --console-address :4567
+    networks:
+      - my_network
+
+networks:
+  my_network:
+    name: my_network
+
+volumes:
+  data:
