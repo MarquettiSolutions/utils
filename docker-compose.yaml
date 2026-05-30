@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_USER: postgres
-      POSTGRES_MULTIPLE_DATABASES: accounting
+      POSTGRES_MULTIPLE_DATABASES: accounting_dev
     ports:
       - "5432:5432"
     restart: unless-stopped
@@ -96,6 +96,14 @@ services:
     command: server /data --address :4566 --console-address :4567
     networks:
       - my_network
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    command: start-dev
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8080:8080"
 
 networks:
   my_network:
